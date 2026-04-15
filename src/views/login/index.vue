@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="login-container">
     <el-card class="login-form-layout">
       <el-form autoComplete="on"
                :model="loginForm"
@@ -9,7 +9,8 @@
         <div style="text-align: center">
           <svg-icon icon-class="login-mall" style="width: 56px;height: 56px;color: #409EFF"></svg-icon>
         </div>
-        <h2 class="login-title color-main">mall-admin-web</h2>
+        <h2 class="login-title color-main">{{ isRegister ? '新用户注册' : '系统登录' }}</h2>
+
         <el-form-item prop="username">
           <el-input name="username"
                     type="text"
@@ -21,10 +22,11 @@
           </span>
           </el-input>
         </el-form-item>
+
         <el-form-item prop="password">
           <el-input name="password"
                     :type="pwdType"
-                    @keyup.enter.native="handleLogin"
+                    @keyup.enter.native="handleAction"
                     v-model="loginForm.password"
                     autoComplete="on"
                     placeholder="请输入密码">
@@ -36,39 +38,27 @@
           </span>
           </el-input>
         </el-form-item>
-        <el-form-item style="margin-bottom: 60px;text-align: center">
-          <el-button style="width: 45%" type="primary" :loading="loading" @click.native.prevent="handleLogin">
-            登录
-          </el-button>
-          <el-button style="width: 45%" type="primary" @click.native.prevent="handleTry">
-            获取体验账号
+
+        <el-form-item style="margin-bottom: 20px; text-align: center">
+          <el-button style="width: 100%" type="primary" :loading="loading" @click.native.prevent="handleAction">
+            {{ isRegister ? '立 即 注 册' : '登 录' }}
           </el-button>
         </el-form-item>
+
+        <div class="login-footer-links">
+          <el-link type="primary" :underline="false" @click="isRegister = !isRegister">
+            {{ isRegister ? '已有账号？返回登录' : '没有账号？立即注册' }}
+          </el-link>
+        </div>
       </el-form>
     </el-card>
-    <img :src="login_center_bg" class="login-center-layout">
-    <el-dialog
-      title="公众号二维码"
-      :visible.sync="dialogVisible"
-      :show-close="false"
-      :center="true"
-      width="30%">
-      <div style="text-align: center">
-        <span class="font-title-large"><span class="color-main font-extra-large">关注公众号</span>回复<span class="color-main font-extra-large">体验</span>获取体验账号</span>
-        <br>
-        <img src="http://macro-oss.oss-cn-shenzhen.aliyuncs.com/mall/banner/qrcode_for_macrozheng_258.jpg" width="160" height="160" style="margin-top: 10px">
-      </div>
-      <span slot="footer" class="dialog-footer">
-    <el-button type="primary" @click="dialogConfirm">确定</el-button>
-      </span>
-    </el-dialog>
   </div>
 </template>
 
 <script>
-  import {isvalidUsername} from '@/utils/validate';
-  import {setSupport,getSupport,setCookie,getCookie} from '@/utils/support';
-  import login_center_bg from '@/assets/images/login_center_bg.png'
+  import { isvalidUsername } from '@/utils/validate';
+  import { setCookie, getCookie } from '@/utils/support';
+  import { createAdmin } from '@/api/login'; // 对应接口定义文件中的 /admin/register
 
   export default {
     name: 'login',
@@ -88,6 +78,7 @@
         }
       };
       return {
+        isRegister: false, // 核心状态控制
         loginForm: {
           username: '',
           password: '',
@@ -97,88 +88,92 @@
           password: [{required: true, trigger: 'blur', validator: validatePass}]
         },
         loading: false,
-        pwdType: 'password',
-        login_center_bg,
-        dialogVisible:false,
-        supportDialogVisible:false
+        pwdType: 'password'
       }
     },
     created() {
-      this.loginForm.username = getCookie("username");
-      this.loginForm.password = getCookie("password");
-      if(this.loginForm.username === undefined||this.loginForm.username==null||this.loginForm.username===''){
-        this.loginForm.username = 'admin';
-      }
-      if(this.loginForm.password === undefined||this.loginForm.password==null){
-        this.loginForm.password = '';
-      }
+      // 这里的默认值可以根据你的开发习惯调整
+      this.loginForm.username = getCookie("username") || 'admin';
+      this.loginForm.password = getCookie("password") || '';
     },
     methods: {
       showPwd() {
-        if (this.pwdType === 'password') {
-          this.pwdType = ''
+        this.pwdType = this.pwdType === 'password' ? '' : 'password';
+      },
+      // 统一处理回车或点击事件
+      handleAction() {
+        if (this.isRegister) {
+          this.handleRegister();
         } else {
-          this.pwdType = 'password'
+          this.handleLogin();
         }
       },
+      // 登录逻辑
       handleLogin() {
         this.$refs.loginForm.validate(valid => {
           if (valid) {
-            // let isSupport = getSupport();
-            // if(isSupport===undefined||isSupport==null){
-            //   this.dialogVisible =true;
-            //   return;
-            // }
             this.loading = true;
             this.$store.dispatch('Login', this.loginForm).then(() => {
               this.loading = false;
-              setCookie("username",this.loginForm.username,15);
-              setCookie("password",this.loginForm.password,15);
+              setCookie("username", this.loginForm.username, 15);
+              setCookie("password", this.loginForm.password, 15);
               this.$router.push({path: '/'})
             }).catch(() => {
               this.loading = false
             })
-          } else {
-            console.log('参数验证不合法！');
-            return false
           }
         })
       },
-      handleTry(){
-        this.dialogVisible =true
-      },
-      dialogConfirm(){
-        this.dialogVisible =false;
-        setSupport(true);
-      },
-      dialogCancel(){
-        this.dialogVisible = false;
-        setSupport(false);
+      // 注册逻辑：调用 api/login.js 中的 createAdmin (接口路径: /admin/register)
+      handleRegister() {
+        this.$refs.loginForm.validate(valid => {
+          if (valid) {
+            this.loading = true;
+            const params = {
+              username: this.loginForm.username,
+              password: this.loginForm.password,
+              nickName: '新用户',
+              email: ''
+            };
+            createAdmin(params).then(res => {
+              this.$message.success('注册成功，请使用新账号登录！');
+              this.isRegister = false; // 注册完切回登录模式
+              this.loading = false;
+            }).catch(() => {
+              this.loading = false;
+            })
+          }
+        })
       }
     }
   }
 </script>
 
 <style scoped>
+  /* 现代 Flex 居中布局，适配所有屏幕，不遮挡元素 */
+  .login-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: #f0f2f5; /* 纯净背景，去掉了带广告感的背景图 */
+  }
+
   .login-form-layout {
-    position: absolute;
-    left: 0;
-    right: 0;
-    width: 360px;
-    margin: 140px auto;
-    border-top: 10px solid #409EFF;
+    width: 380px;
+    border-top: 5px solid #409EFF;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    background: #fff;
   }
 
   .login-title {
     text-align: center;
+    margin-bottom: 30px;
+    font-weight: 400;
   }
 
-  .login-center-layout {
-    background: #409EFF;
-    width: auto;
-    height: auto;
-    max-width: 100%;
-    max-height: 100%;
-    margin-top: 200px;
+  .login-footer-links {
+    text-align: center;
+    margin-top: 10px;
   }
 </style>
